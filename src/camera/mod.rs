@@ -4,7 +4,13 @@ use bevy::{
     core_pipeline::{bloom::Bloom, tonemapping::Tonemapping},
     ecs::system::SystemId,
     prelude::*,
-    render::{camera::ScalingMode, view::RenderLayers},
+    render::{
+        camera::{RenderTarget, ScalingMode}, 
+        render_resource::{
+            Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
+        },
+        view::RenderLayers
+    },
 };
 use bevy_rapier2d::plugin::PhysicsSet;
 
@@ -37,6 +43,12 @@ pub struct MainCamera;
 #[derive(Component, Default)]
 pub struct BackgroundCamera;
 
+/// Marker [`Component`] used to query for the camera with pixel grid snapping support. 
+/// Note that for an entity to be rendered on this Camera, it must be given the 
+/// `RenderLayers::layer(2)` component.
+#[derive(Component, Default)]
+pub struct PixelGridSnapCamera;
+
 const CAMERA_WIDTH: f32 = 320.;
 const CAMERA_HEIGHT: f32 = 180.;
 const CAMERA_ANIMATION_SECS: f32 = 0.4;
@@ -45,7 +57,7 @@ const CAMERA_ANIMATION_SECS: f32 = 0.4;
 ///
 /// Notes:
 /// - Spawns the camera with [`OrthographicProjection`] with fixed scaling at 320x180
-fn setup_camera(mut commands: Commands) {
+fn setup_camera(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     let projection = Projection::Orthographic(OrthographicProjection {
         scaling_mode: ScalingMode::Fixed {
             width: CAMERA_WIDTH,
@@ -68,6 +80,51 @@ fn setup_camera(mut commands: Commands) {
         Transform::default(),
     ));
 
+    // Set up for Low Resolution Canvas & Camera
+    const LOWRES_SCALE: f32 = 1.;
+    let lowres_canvas_size = Extent3d {
+        width: (CAMERA_WIDTH/LOWRES_SCALE) as u32,
+        height: (CAMERA_HEIGHT/LOWRES_SCALE) as u32,
+        ..default()
+    };
+
+    let mut lowres_canvas = Image {
+        texture_descriptor: TextureDescriptor {
+            label: None,
+            // Resolution for low res canvas should be smaller than camera resolutions
+            size: lowres_canvas_size,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::Bgra8UnormSrgb,
+            mip_level_count: 1,
+            sample_count: 1,
+            usage: TextureUsages::TEXTURE_BINDING
+                | TextureUsages::COPY_DST
+                | TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        },
+        ..default()
+    };
+ 
+    // fill image.data with zeroes to clear frame
+    lowres_canvas.resize(lowres_canvas_size);
+    let image_handle = images.add(lowres_canvas);
+
+
+    commands.spawn((
+        Camera2d,
+        PixelGridSnapCamera,
+        Camera {
+            hdr: true,
+            order: -1,
+            target: RenderTarget::Image(image_handle.clone()),
+            ..default()
+        },
+        projection.clone(),
+        RenderLayers::layer(2),
+        Transform::default(),
+    ));
+
+    // Setup for background camera
     commands.spawn((
         Camera2d,
         BackgroundCamera,

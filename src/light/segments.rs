@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{prelude::*, render::view::RenderLayers};
 use bevy_rapier2d::prelude::*;
 use enum_map::EnumMap;
 
@@ -19,6 +19,7 @@ pub struct LightSegmentBundle {
     pub marker: LightSegmentMarker,
     pub mesh: Mesh2d,
     pub material: MeshMaterial2d<LightMaterial>,
+    pub layer: RenderLayers,
     pub visibility: Visibility,
     pub transform: Transform,
 }
@@ -44,6 +45,7 @@ impl FromWorld for LightSegmentCache {
                 marker: LightSegmentMarker,
                 mesh: render_data.mesh.clone(),
                 material: render_data.material_map[color].clone(),
+                layer: render_data.layer.clone(),
                 visibility: Visibility::Visible,
                 transform: Transform::default(),
             }

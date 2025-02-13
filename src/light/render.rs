@@ -1,6 +1,6 @@
 use bevy::{
     prelude::*,
-    render::render_resource::{AsBindGroup, ShaderRef},
+    render::{render_resource::{AsBindGroup, ShaderRef}, view::RenderLayers},
     sprite::{AlphaMode2d, Material2d},
 };
 use enum_map::{enum_map, EnumMap};
@@ -16,6 +16,7 @@ const LIGHT_SHADER_PATH: &str = "shaders/light.wgsl";
 pub struct LightRenderData {
     pub mesh: Mesh2d,
     pub material_map: EnumMap<LightColor, MeshMaterial2d<LightMaterial>>,
+    pub layer: RenderLayers
 }
 
 impl FromWorld for LightRenderData {
@@ -35,6 +36,7 @@ impl FromWorld for LightRenderData {
                 LightColor::Red => materials.add(LightMaterial::from(LightColor::Red)).into(),
                 LightColor::White => materials.add(LightMaterial::from(LightColor::White)).into(),
             },
+            layer: RenderLayers::layer(2)
         }
     }
 }

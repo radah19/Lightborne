@@ -87,7 +87,7 @@ fn spawn_background(mut commands: Commands, asset_server: Res<AssetServer>) {
         Transform::default(),
         Visibility::Visible,
         BackgroundMarker,
-        RenderLayers::layer(1),
+        RenderLayers::layer(2),
     ));
 }
 
