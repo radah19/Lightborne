@@ -5,11 +5,11 @@ use bevy::{
     ecs::system::SystemId,
     prelude::*,
     render::{
-        camera::{RenderTarget, ScalingMode}, 
+        camera::{RenderTarget, ScalingMode},
         render_resource::{
             Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
         },
-        view::RenderLayers
+        view::RenderLayers,
     },
 };
 use bevy_rapier2d::plugin::PhysicsSet;
@@ -24,7 +24,7 @@ impl Plugin for CameraPlugin {
         app.add_event::<MoveCameraEvent>()
             .add_systems(Startup, setup_camera)
             .add_systems(FixedUpdate, move_camera.after(PhysicsSet::Writeback))
-            .add_systems(Update, handle_move_camera);
+            .add_systems(Update, (handle_move_camera, match_camera));
         // update after physics writeback to prevent jittering
     }
 }
@@ -43,8 +43,8 @@ pub struct MainCamera;
 #[derive(Component, Default)]
 pub struct BackgroundCamera;
 
-/// Marker [`Component`] used to query for the camera with pixel grid snapping support. 
-/// Note that for an entity to be rendered on this Camera, it must be given the 
+/// Marker [`Component`] used to query for the camera with pixel grid snapping support.
+/// Note that for an entity to be rendered on this Camera, it must be given the
 /// `RenderLayers::layer(2)` component.
 #[derive(Component, Default)]
 pub struct PixelGridSnapCamera;
@@ -65,26 +65,11 @@ fn setup_camera(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         },
         ..OrthographicProjection::default_2d()
     });
-    commands.spawn((
-        Camera2d,
-        MainCamera,
-        Camera {
-            hdr: true,
-            order: 1,
-            clear_color: ClearColorConfig::None,
-            ..default()
-        },
-        Tonemapping::TonyMcMapface,
-        Bloom::default(),
-        projection.clone(),
-        Transform::default(),
-    ));
 
     // Set up for Low Resolution Canvas & Camera
-    const LOWRES_SCALE: f32 = 1.;
     let lowres_canvas_size = Extent3d {
-        width: (CAMERA_WIDTH/LOWRES_SCALE) as u32,
-        height: (CAMERA_HEIGHT/LOWRES_SCALE) as u32,
+        width: CAMERA_WIDTH as u32,
+        height: CAMERA_HEIGHT as u32,
         ..default()
     };
 
@@ -104,18 +89,38 @@ fn setup_camera(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         },
         ..default()
     };
- 
+
     // fill image.data with zeroes to clear frame
     lowres_canvas.resize(lowres_canvas_size);
     let image_handle = images.add(lowres_canvas);
 
+    commands
+        .spawn((
+            Camera2d,
+            MainCamera,
+            Camera {
+                hdr: true,
+                order: 1,
+                clear_color: ClearColorConfig::None,
+                ..default()
+            },
+            Tonemapping::TonyMcMapface,
+            Bloom::default(),
+            projection.clone(),
+            Transform::default(),
+        ))
+        .with_child((
+            Sprite::from_image(image_handle.clone()),
+            RenderLayers::layer(0),
+        ));
 
     commands.spawn((
         Camera2d,
         PixelGridSnapCamera,
+        Tonemapping::TonyMcMapface,
+        Bloom::default(),
         Camera {
             hdr: true,
-            order: -1,
             target: RenderTarget::Image(image_handle.clone()),
             ..default()
         },
@@ -129,6 +134,7 @@ fn setup_camera(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         Camera2d,
         BackgroundCamera,
         Camera {
+            order: -1,
             hdr: true, // If Cameras mix HDR and non-HDR, then weird ass stuff happens. Seems like
             // https://github.com/bevyengine/bevy/pull/13419 was only a partial fix
             ..default()
@@ -137,6 +143,19 @@ fn setup_camera(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         RenderLayers::layer(1),
         Transform::default(),
     ));
+}
+
+fn match_camera(
+    mut q_pixel: Query<&mut Transform, With<PixelGridSnapCamera>>,
+    q_camera: Query<&Transform, (With<MainCamera>, Without<PixelGridSnapCamera>)>,
+) {
+    let Ok(camera) = q_camera.get_single() else {
+        return;
+    };
+    let Ok(mut pixel) = q_pixel.get_single_mut() else {
+        return;
+    };
+    *pixel = *camera;
 }
 
 #[derive(Event)]
