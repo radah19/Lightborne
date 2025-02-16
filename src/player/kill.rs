@@ -39,7 +39,8 @@ pub fn reset_player_position(
             transform.translation.x =
                 instance.world_x.expect("Lightborne uses Free world layout") as f32;
             transform.translation.y =
-                -instance.world_y.expect("Lightborne uses Free world layout") as f32;
+                -instance.world_y.expect("Lightborne uses Free world layout") as f32 + 3.0;
+            // add small height so Lyra is not stuck into the floor
             return;
         }
     }
@@ -66,14 +67,18 @@ pub fn kill_player_on_spike(
     mut q_hurt: Query<(&mut Spike, Entity), With<HurtMarker>>,
     mut ev_reset_level: EventWriter<ResetLevel>,
 ) {
-    let rapier = rapier_context.single();
-    for player in q_player.iter() {
-        for (mut spike, hurt) in q_hurt.iter_mut() {
-            if rapier.intersection_pair(player, hurt) == Some(true) {
-                spike.add_death();
-                ev_reset_level.send(ResetLevel::Respawn);
-                return;
-            }
+    let Ok(rapier) = rapier_context.get_single() else {
+        return;
+    };
+    let Ok(player) = q_player.get_single() else {
+        return;
+    };
+
+    for (mut spike, hurt) in q_hurt.iter_mut() {
+        if rapier.intersection_pair(player, hurt) == Some(true) {
+            spike.add_death();
+            ev_reset_level.send(ResetLevel::Respawn);
+            return;
         }
     }
 }

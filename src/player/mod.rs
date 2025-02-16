@@ -16,7 +16,10 @@ use crate::{
 };
 
 use kill::{kill_player_on_spike, reset_player_on_level_switch, reset_player_position};
-use light::{handle_color_switch, preview_light_path, shoot_light, PlayerLightInventory};
+use light::{
+    despawn_angle_indicator, handle_color_switch, preview_light_path, shoot_light,
+    spawn_angle_indicator, PlayerLightInventory,
+};
 use movement::{move_player, queue_jump, PlayerMovement};
 use spawn::{add_player_sensors, init_player_bundle, PlayerHurtMarker};
 
@@ -54,6 +57,8 @@ impl Plugin for PlayerManagementPlugin {
             (
                 handle_color_switch,
                 preview_light_path.run_if(input_pressed(MouseButton::Left)),
+                spawn_angle_indicator.run_if(input_just_pressed(MouseButton::Left)),
+                despawn_angle_indicator.run_if(input_just_released(MouseButton::Left)),
                 shoot_light.run_if(input_just_released(MouseButton::Left)),
             )
                 .chain()

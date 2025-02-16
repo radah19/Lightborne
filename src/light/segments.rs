@@ -164,7 +164,7 @@ pub fn simulate_light_sources(
                 ));
             }
 
-            if q_light_sensor.contains(entity) {
+            if let Ok(_) = q_light_sensor.get(entity) {
                 ev_hit_by_light.send(HitByLightEvent(entity));
             };
 

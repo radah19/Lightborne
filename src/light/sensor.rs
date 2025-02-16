@@ -4,12 +4,11 @@ use bevy_rapier2d::prelude::*;
 use std::time::Duration;
 
 use crate::{
-    level::{
-        activatable::GroupTriggeredEvent,
-        interactable::{init_interactable, Interactable, InteractableSFX},
-    },
+    level::crystal::{CrystalColor, CrystalToggleEvent},
     shared::GroupLabel,
 };
+
+use super::LightColor;
 
 /// [`Event`] used to notify other entities to trigger based on collision with light.
 /// An included [`Entity`] is used to indicate the corresponding [`LightSensor`].
@@ -27,45 +26,61 @@ pub struct LightSensor {
     pub activation_timer: Timer,
     /// Whether or not the sensor was hit the previous frame
     pub was_hit: bool,
+    /// The color of the crystals to toggle
+    pub toggle_color: CrystalColor,
 }
 
-impl Default for LightSensor {
-    fn default() -> Self {
+impl LightSensor {
+    fn new(toggle_color: CrystalColor) -> Self {
         let mut timer = Timer::new(Duration::from_millis(300), TimerMode::Once);
         timer.pause();
-
         LightSensor {
             activation_timer: timer,
             cumulative_exposure: Stopwatch::default(),
             was_hit: false,
+            toggle_color,
         }
     }
 }
 
 /// [`Bundle`] that includes all the [`Component`]s needed for a [`LightSensor`] to function
 /// properly.
-#[derive(Default, Bundle)]
+#[derive(Bundle)]
 pub struct LightSensorBundle {
-    interactable: Interactable,
     collider: Collider,
     sensor: Sensor,
     collision_groups: CollisionGroups,
-    light_interaction: LightSensor,
+    light_sensor: LightSensor,
 }
 
 impl From<&EntityInstance> for LightSensorBundle {
     fn from(entity_instance: &EntityInstance) -> Self {
         match entity_instance.identifier.as_ref() {
-            "Button" => Self {
-                collider: Collider::cuboid(4., 4.),
-                sensor: Sensor,
-                collision_groups: CollisionGroups::new(
-                    GroupLabel::LIGHT_SENSOR,
-                    GroupLabel::LIGHT_RAY | GroupLabel::WHITE_RAY,
-                ),
-                light_interaction: LightSensor::default(),
-                interactable: init_interactable(entity_instance),
-            },
+            "Button" => {
+                let light_color: LightColor = entity_instance
+                    .get_enum_field("light_color")
+                    .expect("light_color needs to be an enum field on all buttons")
+                    .into();
+
+                let id = entity_instance
+                    .get_int_field("id")
+                    .expect("id needs to be an int field on all buttons");
+
+                let sensor_color = CrystalColor {
+                    color: light_color,
+                    id: *id,
+                };
+
+                return Self {
+                    collider: Collider::cuboid(4., 4.),
+                    sensor: Sensor,
+                    collision_groups: CollisionGroups::new(
+                        GroupLabel::LIGHT_SENSOR,
+                        GroupLabel::LIGHT_RAY | GroupLabel::WHITE_RAY,
+                    ),
+                    light_sensor: LightSensor::new(sensor_color),
+                };
+            }
             _ => unreachable!(),
         }
     }
@@ -89,14 +104,10 @@ pub fn reset_light_sensors(mut q_sensors: Query<&mut LightSensor>) {
 /// implementation across multiple systems to better utilize [`Event`].
 pub fn update_light_sensors(
     mut commands: Commands,
-    mut q_sensors: Query<(
-        Entity,
-        &mut LightSensor,
-        &Interactable,
-        Option<&InteractableSFX>,
-    )>,
-    mut ev_group_triggered: EventWriter<GroupTriggeredEvent>,
+    mut q_sensors: Query<(Entity, &mut LightSensor)>,
     mut ev_hit_by_light: EventReader<HitByLightEvent>,
+    mut ev_crystal_toggle: EventWriter<CrystalToggleEvent>,
+    asset_server: Res<AssetServer>,
     time: Res<Time>,
 ) {
     let mut hit_sensors: EntityHashSet = EntityHashSet::default();
@@ -104,52 +115,34 @@ pub fn update_light_sensors(
         hit_sensors.insert(ev.0);
     }
 
-    for (entity, mut sensor, interactable, sfx) in q_sensors.iter_mut() {
-        if hit_sensors.contains(&entity) {
-            if sensor.activation_timer.paused() {
+    for (entity, mut sensor) in q_sensors.iter_mut() {
+        let was_hit = hit_sensors.contains(&entity);
+
+        if was_hit {
+            if !sensor.was_hit {
                 sensor.activation_timer.unpause();
             }
-
-            sensor.activation_timer.tick(time.delta());
             sensor.cumulative_exposure.tick(time.delta());
-
-            if !sensor.was_hit {
-                sensor.activation_timer.reset();
-            }
-
-            if sensor.activation_timer.just_finished() {
-                ev_group_triggered.send(GroupTriggeredEvent {
-                    id: interactable.id,
-                });
-
-                // FIXME: this feels rather hard coded, the interactable on_triggered effect sound
-                // play should only have to be written once, in a system them handles all interactables
-                // and not only light sensors
-                if let Some(sfx) = sfx {
-                    if let Some(on_triggered) = &sfx.on_triggered {
-                        commands.entity(entity).insert((
-                            AudioPlayer::new(on_triggered.clone()),
-                            PlaybackSettings::REMOVE,
-                        ));
-                    }
-                }
-            }
-
-            sensor.was_hit = true;
-        } else {
-            sensor.activation_timer.tick(time.delta());
-
-            if sensor.was_hit {
-                sensor.activation_timer.reset();
-            }
-
-            if sensor.activation_timer.just_finished() {
-                ev_group_triggered.send(GroupTriggeredEvent {
-                    id: interactable.id,
-                });
-            }
-
-            sensor.was_hit = false;
         }
+
+        // if prev sensor state was different than current, we reset its timer
+        if sensor.was_hit != was_hit {
+            sensor.activation_timer.reset();
+        }
+
+        sensor.activation_timer.tick(time.delta());
+
+        if sensor.activation_timer.just_finished() {
+            ev_crystal_toggle.send(CrystalToggleEvent {
+                color: sensor.toggle_color,
+            });
+
+            commands.entity(entity).with_child((
+                AudioPlayer::new(asset_server.load("sfx/button.wav")),
+                PlaybackSettings::DESPAWN,
+            ));
+        }
+
+        sensor.was_hit = was_hit;
     }
 }
