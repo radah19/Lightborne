@@ -18,6 +18,36 @@ pub struct PlayerLightInventory {
     sources: EnumMap<LightColor, Option<Entity>>,
 }
 
+#[derive(Component)]
+pub struct AngleMarker;
+
+pub fn spawn_angle_indicator(
+    mut commands: Commands,
+    q_player: Query<Entity, With<PlayerMarker>>,
+    asset_server: Res<AssetServer>,
+) {
+    let Ok(player) = q_player.get_single() else {
+        return;
+    };
+
+    commands.entity(player).with_child((
+        Sprite {
+            image: asset_server.load("angle.png"),
+            color: Color::srgba(1.0, 1.0, 1.0, 0.1),
+            ..default()
+        },
+        AngleMarker,
+    ));
+}
+
+pub fn despawn_angle_indicator(mut commands: Commands, q_angle: Query<Entity, With<AngleMarker>>) {
+    let Ok(angle) = q_angle.get_single() else {
+        return;
+    };
+
+    commands.entity(angle).despawn_recursive();
+}
+
 /// [`System`] to handle the keyboard presses corresponding to color switches.
 pub fn handle_color_switch(
     keys: Res<ButtonInput<KeyCode>>,

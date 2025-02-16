@@ -12,6 +12,7 @@ use bevy::{
         view::RenderLayers,
     },
 };
+use bevy_ecs_ldtk::LevelIid;
 use bevy_rapier2d::plugin::PhysicsSet;
 
 use crate::{level::CurrentLevel, player::PlayerMarker, shared::GameState};
@@ -239,7 +240,7 @@ pub fn handle_move_camera(
 /// [`System`] that moves camera to player's position and constrains it to the [`CurrentLevel`]'s `world_box`.
 pub fn move_camera(
     current_level: Res<CurrentLevel>,
-    mut previous_level_iid: Local<String>,
+    mut previous_level_iid: Local<LevelIid>,
     q_player: Query<&Transform, With<PlayerMarker>>,
     mut ev_move_camera: EventWriter<MoveCameraEvent>,
     set_state_playing_cb: Local<SetStatePlayingCallback>,
@@ -261,17 +262,17 @@ pub fn move_camera(
         player_transform.translation.y.max(y_min).min(y_max),
     );
 
-    let event = if current_level.level_iid != *previous_level_iid && !previous_level_iid.is_empty()
-    {
-        MoveCameraEvent::Animated {
-            to: new_pos,
-            duration: Duration::from_secs_f32(CAMERA_ANIMATION_SECS),
-            callback: Some(set_state_playing_cb.0),
-            curve: EasingCurve::new(0.0, 1.0, EaseFunction::SineInOut),
-        }
-    } else {
-        MoveCameraEvent::Instant { to: new_pos }
-    };
+    let event =
+        if current_level.level_iid != *previous_level_iid && !previous_level_iid.get().is_empty() {
+            MoveCameraEvent::Animated {
+                to: new_pos,
+                duration: Duration::from_secs_f32(CAMERA_ANIMATION_SECS),
+                callback: Some(set_state_playing_cb.0),
+                curve: EasingCurve::new(0.0, 1.0, EaseFunction::SineInOut),
+            }
+        } else {
+            MoveCameraEvent::Instant { to: new_pos }
+        };
 
     ev_move_camera.send(event);
     *previous_level_iid = current_level.level_iid.clone();
