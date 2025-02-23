@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use bevy::{
-    core_pipeline::{bloom::Bloom, tonemapping::Tonemapping},
+    core_pipeline::tonemapping::Tonemapping,
     ecs::system::SystemId,
     prelude::*,
     render::{
@@ -12,10 +12,12 @@ use bevy::{
         view::RenderLayers,
     },
 };
-use bevy_ecs_ldtk::LevelIid;
 use bevy_rapier2d::plugin::PhysicsSet;
 
-use crate::{level::CurrentLevel, player::PlayerMarker, shared::GameState};
+use crate::{
+    level::{CurrentLevel, LevelSystems},
+    player::PlayerMarker,
+};
 
 /// The [`Plugin`] responsible for handling anything Camera related.
 pub struct CameraPlugin;
@@ -24,9 +26,14 @@ impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<MoveCameraEvent>()
             .add_systems(Startup, setup_camera)
-            .add_systems(FixedUpdate, move_camera.after(PhysicsSet::Writeback))
+            .add_systems(
+                FixedUpdate,
+                move_camera
+                    .after(PhysicsSet::Writeback)
+                    .in_set(LevelSystems::Simulation),
+            )
+            // Has event reader, so place in update
             .add_systems(Update, (handle_move_camera, match_camera));
-        // update after physics writeback to prevent jittering
     }
 }
 
@@ -50,9 +57,15 @@ pub struct BackgroundCamera;
 #[derive(Component, Default)]
 pub struct PixelGridSnapCamera;
 
-const CAMERA_WIDTH: f32 = 320.;
-const CAMERA_HEIGHT: f32 = 180.;
-const CAMERA_ANIMATION_SECS: f32 = 0.4;
+/// Marker [`Component`] used to query for the camera with pixel grid snapping support.
+/// Note that for an entity to be rendered on this Camera, it must be given the
+/// `RenderLayers::layer(2)` component.
+#[derive(Component, Default)]
+pub struct PixelGridSnapCamera;
+
+pub const CAMERA_WIDTH: f32 = 320.;
+pub const CAMERA_HEIGHT: f32 = 180.;
+pub const CAMERA_ANIMATION_SECS: f32 = 0.4;
 
 /// [`Startup`] [`System`] that spawns the [`Camera2d`] in the world.
 ///
@@ -106,7 +119,7 @@ fn setup_camera(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
                 ..default()
             },
             Tonemapping::TonyMcMapface,
-            Bloom::default(),
+            //Bloom::default(),
             projection.clone(),
             Transform::default(),
         ))
@@ -159,7 +172,20 @@ fn match_camera(
     *pixel = *camera;
 }
 
-#[derive(Event)]
+fn match_camera(
+    mut q_pixel: Query<&mut Transform, With<PixelGridSnapCamera>>,
+    q_camera: Query<&Transform, (With<MainCamera>, Without<PixelGridSnapCamera>)>,
+) {
+    let Ok(camera) = q_camera.get_single() else {
+        return;
+    };
+    let Ok(mut pixel) = q_pixel.get_single_mut() else {
+        return;
+    };
+    *pixel = *camera;
+}
+
+#[derive(Event, Debug)]
 pub enum MoveCameraEvent {
     Animated {
         to: Vec2,
@@ -240,10 +266,8 @@ pub fn handle_move_camera(
 /// [`System`] that moves camera to player's position and constrains it to the [`CurrentLevel`]'s `world_box`.
 pub fn move_camera(
     current_level: Res<CurrentLevel>,
-    mut previous_level_iid: Local<LevelIid>,
     q_player: Query<&Transform, With<PlayerMarker>>,
     mut ev_move_camera: EventWriter<MoveCameraEvent>,
-    set_state_playing_cb: Local<SetStatePlayingCallback>,
 ) {
     let Ok(player_transform) = q_player.get_single() else {
         return;
@@ -262,30 +286,5 @@ pub fn move_camera(
         player_transform.translation.y.max(y_min).min(y_max),
     );
 
-    let event =
-        if current_level.level_iid != *previous_level_iid && !previous_level_iid.get().is_empty() {
-            MoveCameraEvent::Animated {
-                to: new_pos,
-                duration: Duration::from_secs_f32(CAMERA_ANIMATION_SECS),
-                callback: Some(set_state_playing_cb.0),
-                curve: EasingCurve::new(0.0, 1.0, EaseFunction::SineInOut),
-            }
-        } else {
-            MoveCameraEvent::Instant { to: new_pos }
-        };
-
-    ev_move_camera.send(event);
-    *previous_level_iid = current_level.level_iid.clone();
-}
-
-pub struct SetStatePlayingCallback(SystemId);
-
-impl FromWorld for SetStatePlayingCallback {
-    fn from_world(world: &mut World) -> Self {
-        SetStatePlayingCallback(world.register_system(set_state_playing))
-    }
-}
-
-pub fn set_state_playing(mut next_game_state: ResMut<NextState<GameState>>) {
-    next_game_state.set(GameState::Playing);
+    ev_move_camera.send(MoveCameraEvent::Instant { to: new_pos });
 }

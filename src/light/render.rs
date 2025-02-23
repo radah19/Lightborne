@@ -35,6 +35,7 @@ impl FromWorld for LightRenderData {
                 LightColor::Green => materials.add(LightMaterial::from(LightColor::Green)).into(),
                 LightColor::Red => materials.add(LightMaterial::from(LightColor::Red)).into(),
                 LightColor::White => materials.add(LightMaterial::from(LightColor::White)).into(),
+                LightColor::Blue => materials.add(LightMaterial::from(LightColor::Blue)).into(),
             },
             layer: RenderLayers::layer(2)
         }
@@ -48,6 +49,8 @@ pub struct LightMaterial {
     #[uniform(0)]
     pub color: LinearRgba,
     pub alpha_mode: AlphaMode2d,
+    // WebGL2 requires this struct be 16-byte aligned
+    pub _wasm_padding: Vec2,
 }
 
 impl Material2d for LightMaterial {
@@ -57,5 +60,17 @@ impl Material2d for LightMaterial {
 
     fn alpha_mode(&self) -> AlphaMode2d {
         self.alpha_mode
+    }
+}
+
+// WebGL2 requires these structs be 16-byte aligned
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::mem;
+
+    #[test]
+    fn light_material_alignment() {
+        assert_eq!(mem::size_of::<LightMaterial>() % 16, 0);
     }
 }
