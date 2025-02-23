@@ -37,7 +37,7 @@ impl FromWorld for LightRenderData {
                 LightColor::White => materials.add(LightMaterial::from(LightColor::White)).into(),
                 LightColor::Blue => materials.add(LightMaterial::from(LightColor::Blue)).into(),
             },
-            layer: RenderLayers::layer(2)
+            layer: RenderLayers::layer(5)
         }
     }
 }

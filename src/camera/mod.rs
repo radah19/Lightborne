@@ -33,7 +33,10 @@ impl Plugin for CameraPlugin {
                     .in_set(LevelSystems::Simulation),
             )
             // Has event reader, so place in update
-            .add_systems(Update, (handle_move_camera, match_camera));
+            .add_systems(
+                Update, 
+                (handle_move_camera, match_camera))
+            .add_systems(PreUpdate, clear_canvas);
     }
 }
 
@@ -76,15 +79,14 @@ fn setup_camera(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
 
     // Set up for Low Resolution Canvas & Camera
     let lowres_canvas_size = Extent3d {
-        width: CAMERA_WIDTH as u32,
-        height: CAMERA_HEIGHT as u32,
+        width: (CAMERA_WIDTH) as u32,
+        height: (CAMERA_HEIGHT) as u32,
         ..default()
     };
 
     let mut lowres_canvas = Image {
         texture_descriptor: TextureDescriptor {
             label: None,
-            // Resolution for low res canvas should be smaller than camera resolutions
             size: lowres_canvas_size,
             dimension: TextureDimension::D2,
             format: TextureFormat::Bgra8UnormSrgb,
@@ -100,6 +102,7 @@ fn setup_camera(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
 
     // fill image.data with zeroes to clear frame
     lowres_canvas.resize(lowres_canvas_size);
+    lowres_canvas.data.fill(0);
     let image_handle = images.add(lowres_canvas);
 
     commands
@@ -129,11 +132,13 @@ fn setup_camera(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         //Bloom::default(),
         Camera {
             hdr: true,
+            order: 0,
             target: RenderTarget::Image(image_handle.clone()),
+            clear_color: ClearColorConfig::None,
             ..default()
         },
         projection.clone(),
-        RenderLayers::layer(2),
+        RenderLayers::layer(5),
         Transform::default(),
     ));
 
@@ -268,4 +273,14 @@ pub fn move_camera(
     );
 
     ev_move_camera.send(MoveCameraEvent::Instant { to: new_pos });
+}
+
+fn clear_canvas(mut images: ResMut<Assets<Image>>, pixel_camera: Query<&Camera, With<PixelGridSnapCamera>>){
+    if let Ok(camera) = pixel_camera.get_single() {
+        if let RenderTarget::Image(image_handle) = &camera.target {
+            if let Some(image) = images.get_mut(image_handle) {
+                image.data.fill(0); // Any image on the canvas should be cleared
+            }
+        }
+    }
 }
