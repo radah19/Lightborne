@@ -57,12 +57,6 @@ pub struct BackgroundCamera;
 #[derive(Component, Default)]
 pub struct PixelGridSnapCamera;
 
-/// Marker [`Component`] used to query for the camera with pixel grid snapping support.
-/// Note that for an entity to be rendered on this Camera, it must be given the
-/// `RenderLayers::layer(2)` component.
-#[derive(Component, Default)]
-pub struct PixelGridSnapCamera;
-
 pub const CAMERA_WIDTH: f32 = 320.;
 pub const CAMERA_HEIGHT: f32 = 180.;
 pub const CAMERA_ANIMATION_SECS: f32 = 0.4;
@@ -132,7 +126,7 @@ fn setup_camera(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         Camera2d,
         PixelGridSnapCamera,
         Tonemapping::TonyMcMapface,
-        Bloom::default(),
+        //Bloom::default(),
         Camera {
             hdr: true,
             target: RenderTarget::Image(image_handle.clone()),
@@ -157,19 +151,6 @@ fn setup_camera(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         RenderLayers::layer(1),
         Transform::default(),
     ));
-}
-
-fn match_camera(
-    mut q_pixel: Query<&mut Transform, With<PixelGridSnapCamera>>,
-    q_camera: Query<&Transform, (With<MainCamera>, Without<PixelGridSnapCamera>)>,
-) {
-    let Ok(camera) = q_camera.get_single() else {
-        return;
-    };
-    let Ok(mut pixel) = q_pixel.get_single_mut() else {
-        return;
-    };
-    *pixel = *camera;
 }
 
 fn match_camera(
